@@ -11,12 +11,34 @@ const wss = new WebSocket.Server({ server });
 
 const PORT = process.env.PORT || 4000;
 
-// Replica registry: id -> base URL
-const REPLICAS = {
-  replica1: "http://replica1:5001",
-  replica2: "http://replica2:5002",
-  replica3: "http://replica3:5003",
-};
+// ─── Replica Discovery ─────────────────────────────────────────────────────────
+// Load replica URLs from environment variable or use Docker defaults
+const REPLICAS = parseReplicaUrls();
+
+function parseReplicaUrls() {
+  const replicaUrlsEnv = process.env.REPLICA_URLS;
+  
+  if (replicaUrlsEnv) {
+    // Parse comma-separated list: "http://machine2:5001,http://machine3:5001,http://machine4:5001"
+    const urls = replicaUrlsEnv.split(',').map(url => url.trim());
+    const replicas = {};
+    urls.forEach((url, index) => {
+      const replicaId = `replica${index + 1}`;
+      replicas[replicaId] = url;
+    });
+    console.log(`[Gateway] Loaded replica URLs from REPLICA_URLS env var:`, replicas);
+    return replicas;
+  }
+  
+  // Default: Docker service names (backward compatibility)
+  const defaults = {
+    replica1: "http://replica1:5001",
+    replica2: "http://replica2:5002",
+    replica3: "http://replica3:5003",
+  };
+  console.log(`[Gateway] Using default Docker service names. To use custom addresses, set REPLICA_URLS env var.`);
+  return defaults;
+}
 
 let currentLeader = null;
 let clients = new Set();

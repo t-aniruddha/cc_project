@@ -405,7 +405,29 @@
   });
 
   // ─── WebSocket ────────────────────────────────────────────────────────────────
-  const WS_URL = `ws://${location.hostname}:4000`;
+  // Get gateway URL from query parameter 'gatewayUrl' or default to localhost:4000
+  // Usage: index.html?gatewayUrl=ws://gateway.local:4000 (for cross-device access)
+  //        index.html (for localhost access)
+  function getGatewayConfig() {
+    const params = new URLSearchParams(location.search);
+    const customGateway = params.get('gatewayUrl');
+    if (customGateway) {
+      const wsUrl = customGateway.startsWith('ws://') || customGateway.startsWith('wss://')
+        ? customGateway
+        : `ws://${customGateway}`;
+      const httpUrl = wsUrl.replace(/^wss?:/, 'http:');
+      return { wsUrl, httpUrl };
+    }
+    // Default: use localhost
+    return {
+      wsUrl: `ws://${location.hostname}:4000`,
+      httpUrl: `http://${location.hostname}:4000`
+    };
+  }
+
+  const gatewayConfig = getGatewayConfig();
+  const WS_URL = gatewayConfig.wsUrl;
+  const HTTP_URL = gatewayConfig.httpUrl;
   let ws = null;
   let reconnectTimer = null;
 
@@ -462,7 +484,7 @@
   // Poll gateway for leader info
   setInterval(async () => {
     try {
-      const res = await fetch(`http://${location.hostname}:4000/health`);
+      const res = await fetch(`${HTTP_URL}/health`);
       const data = await res.json();
       document.getElementById('leader-status').textContent = `leader: ${data.leader || '—'}`;
     } catch (_) {}

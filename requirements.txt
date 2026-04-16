@@ -1,0 +1,112 @@
+# MiniRaft Requirements
+# This file documents all dependencies needed to run the miniraft project
+
+## System Requirements
+- Node.js: 14.x or higher (https://nodejs.org)
+- npm: 6.x or higher (comes with Node.js)
+- Docker & Docker Compose (optional, for containerized deployment)
+- Python 3.6+ (optional, for serving frontend with http.server)
+
+## Node.js Package Dependencies
+
+### Gateway Service
+- express@^4.18.0        - Web framework for HTTP/WebSocket server
+- ws@^8.16.0             - WebSocket library
+- axios@^1.6.0           - HTTP client for communication with replicas
+
+### Replica Services (replica1, replica2, replica3)
+- express@^4.18.0        - Web framework for HTTP server
+- axios@^1.6.0           - HTTP client for RAFT communication with peers
+
+### Development Dependencies (All Services)
+- nodemon@^3.0.0         - Auto-reload on file changes (development only)
+
+## Installation
+
+### Quick Install (All Services)
+```bash
+cd miniraft
+npm install                    # Install dependencies in each service
+cd gateway && npm install
+cd ../replica1 && npm install
+cd ../replica2 && npm install
+cd ../replica3 && npm install
+```
+
+Or use Docker:
+```bash
+docker compose up --build
+```
+
+## Optional: Frontend Server Requirements
+
+For serving the frontend on bare-metal systems:
+- Python 3.6+ (most systems already have this)
+- Or: http-server (npm install -g http-server)
+- Or: Any static HTTP server (Nginx, Apache, etc.)
+
+## Network Requirements (Multi-Device Deployment)
+
+When deploying across multiple machines:
+- All machines on same LAN
+- Network ports open: 3000 (frontend), 4000 (gateway), 5001-5003 (replicas)
+- Hostname resolution configured (DNS or /etc/hosts):
+  - gateway.local, replica1.local, replica2.local, replica3.local
+  - Or use static IP addresses
+
+## Verification
+
+After installation, verify everything works:
+
+```bash
+# Check Node.js version
+node --version
+
+# Check npm version
+npm --version
+
+# Test single-machine Docker setup
+cd miniraft
+docker compose up
+
+# Or test bare-metal setup
+export REPLICA_URLS="http://replica1.local:5001,http://replica2.local:5001,http://replica3.local:5001"
+node gateway/index.js &
+node replica1/index.js &
+node replica2/index.js &
+node replica3/index.js &
+```
+
+## Troubleshooting
+
+### Port Already in Use
+```bash
+# Find process using port 4000
+lsof -i :4000              # macOS/Linux
+netstat -ano | findstr :4000 # Windows
+
+# Kill process
+kill -9 <PID>              # macOS/Linux
+taskkill /PID <PID> /F     # Windows
+```
+
+### npm Dependency Issues
+```bash
+# Clear npm cache
+npm cache clean --force
+
+# Reinstall dependencie
+rm -rf node_modules package-lock.json  # Linux/macOS
+rmdir /s /q node_modules               # Windows
+npm install
+```
+
+### Docker Issues
+```bash
+# Rebuild images
+docker compose up --build
+
+# Full reset
+docker compose down -v      # Remove containers and volumes
+docker compose up --build
+```

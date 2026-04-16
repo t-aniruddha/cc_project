@@ -43,6 +43,43 @@ Open in **multiple browser tabs** to simulate multiple users. Strokes drawn in o
 
 ---
 
+## 🌐 Multi-Device Deployment
+
+Want to run miniraft across **multiple physical machines** on a network instead of multiple tabs?
+
+### Quick Setup (3-4 Machines)
+
+**Machine 1** (Gateway + Frontend):
+```bash
+cd miniraft
+npm install
+export REPLICA_URLS="http://machine2:5001,http://machine3:5001,http://machine4:5001"
+node gateway/index.js &
+cd frontend && python -m http.server 3000
+```
+
+**Machines 2-4** (Replicas):
+```bash
+cd miniraft
+npm install
+export REPLICA_ID=replica1
+export ALL_REPLICAS_URLS="http://machine2:5001,http://machine3:5001,http://machine4:5001"
+node replica1/index.js
+```
+
+**Access**: `http://machine1:3000?gatewayUrl=ws://machine1:4000`
+
+### Full Documentation
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for:
+- 📍 Hostname vs IP configuration
+- 🚀 Startup scripts (Bash & PowerShell)
+- 🐳 Docker Swarm multi-host setup
+- 🔧 Environment variable reference
+- 🧪 Validation & troubleshooting
+
+---
+
 ## How to Demo the Assignment Requirements
 
 ### ✅ Leader Election

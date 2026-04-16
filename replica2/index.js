@@ -9,12 +9,34 @@ const REPLICA_ID = process.env.REPLICA_ID || "replica1";
 const PORT = parseInt(process.env.PORT || "5001");
 const GATEWAY_URL = process.env.GATEWAY_URL || "http://gateway:4000";
 
-const ALL_REPLICAS = {
-  replica1: "http://replica1:5001",
-  replica2: "http://replica2:5002",
-  replica3: "http://replica3:5003",
-};
+// ─── Peer Discovery ────────────────────────────────────────────────────────────
+// Load replica URLs from environment variable or use Docker defaults
+const ALL_REPLICAS = parseReplicaUrls();
 const PEERS = Object.entries(ALL_REPLICAS).filter(([id]) => id !== REPLICA_ID);
+
+function parseReplicaUrls() {
+  const replicaUrlsEnv = process.env.ALL_REPLICAS_URLS;
+  
+  if (replicaUrlsEnv) {
+    // Parse comma-separated list: "http://machine2:5001,http://machine3:5001,http://machine4:5001"
+    const urls = replicaUrlsEnv.split(',').map(url => url.trim());
+    const replicas = {};
+    urls.forEach((url, index) => {
+      const replicaId = `replica${index + 1}`;
+      replicas[replicaId] = url;
+    });
+    log_(`Loaded replica URLs from ALL_REPLICAS_URLS env var`);
+    return replicas;
+  }
+  
+  // Default: Docker service names (backward compatibility)
+  const defaults = {
+    replica1: "http://replica1:5001",
+    replica2: "http://replica2:5002",
+    replica3: "http://replica3:5003",
+  };
+  return defaults;
+}
 
 // ─── RAFT State ───────────────────────────────────────────────────────────────
 let state = "follower";  // follower | candidate | leader
