@@ -162,6 +162,63 @@
   .action-btn.erase { border-color: var(--red); color: var(--red); }
   .action-btn.erase:hover { background: var(--red); color: white; }
 
+  /* ── Cluster Mini UI ── */
+  .cluster-panel {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 20px;
+    background: rgba(22, 22, 26, 0.85);
+    border-bottom: 1px solid var(--border);
+    font-family: 'Space Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--muted);
+    flex-shrink: 0;
+  }
+
+  .cluster-left {
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    min-width: 0;
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  .chip strong {
+    color: var(--accent2);
+    font-weight: 700;
+  }
+
+  .cluster-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .cluster-btn {
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    cursor: pointer;
+    font-size: 0.68rem;
+    font-family: 'Space Mono', monospace;
+  }
+
+  .cluster-btn:hover { background: var(--border); }
+
   /* ── Canvas Area ── */
   .canvas-wrapper {
     flex: 1;
@@ -265,14 +322,23 @@
   <button class="action-btn erase" id="clear-btn">CLEAR</button>
 </div>
 
+<div class="cluster-panel">
+  <div class="cluster-left">
+    <div class="chip">leader <strong id="leader-chip">—</strong></div>
+    <div id="last-health-check">health: waiting...</div>
+    <div id="stored-log-count">stored logs: 0</div>
+  </div>
+  <div class="cluster-actions">
+    <button class="cluster-btn" id="clear-logs-btn">CLEAR LOGS</button>
+  </div>
+</div>
+
 <div class="canvas-wrapper">
   <canvas id="grid-canvas"></canvas>
   <canvas id="draw-canvas"></canvas>
 </div>
 
-<div class="log-panel" id="log-panel">
-  <div class="log-entry info">[ system ] DistDraw initialized</div>
-</div>
+<div class="log-panel" id="log-panel"></div>
 
 <div id="toast"></div>
 
@@ -313,6 +379,51 @@
   let currentSize = 3;
   let currentPath = [];
   let strokeCount = 0;
+  let currentLeader = null;
+  let leaderPollHealthy = false;
+
+  // ─── Persistent Log Store ─────────────────────────────────────────────────────
+  const LOG_STORAGE_KEY = 'distdraw.logs.v1';
+  const MAX_LOGS = 100;
+  let logStore = [];
+
+  function loadStoredLogs() {
+    try {
+      const raw = localStorage.getItem(LOG_STORAGE_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return parsed.slice(-MAX_LOGS);
+    } catch {
+      return [];
+    }
+  }
+
+  function persistLogs() {
+    localStorage.setItem(LOG_STORAGE_KEY, JSON.stringify(logStore.slice(-MAX_LOGS)));
+  }
+
+  function updateStoredLogCount() {
+    document.getElementById('stored-log-count').textContent = `stored logs: ${logStore.length}`;
+  }
+
+  function renderLogEntry(item) {
+    const panel = document.getElementById('log-panel');
+    const entry = document.createElement('div');
+    entry.className = `log-entry ${item.type || ''}`;
+    entry.textContent = `[ ${item.time} ] ${item.msg}`;
+    panel.appendChild(entry);
+    panel.scrollTop = panel.scrollHeight;
+    while (panel.children.length > MAX_LOGS) panel.removeChild(panel.firstChild);
+  }
+
+  function hydrateLogsFromStorage() {
+    const panel = document.getElementById('log-panel');
+    panel.innerHTML = '';
+    logStore = loadStoredLogs();
+    logStore.forEach(renderLogEntry);
+    updateStoredLogCount();
+  }
 
   // ─── Toolbar Logic ────────────────────────────────────────────────────────────
   document.querySelectorAll('.swatch').forEach(s => {
@@ -459,26 +570,53 @@
     label.textContent = s;
   }
 
+  function setLeaderUI(leader) {
+    const normalized = leader || '—';
+    document.getElementById('leader-status').textContent = `leader: ${normalized}`;
+    document.getElementById('leader-chip').textContent = normalized;
+  }
+
   // Poll gateway for leader info
   setInterval(async () => {
     try {
       const res = await fetch(`http://${location.hostname}:4000/health`);
       const data = await res.json();
-      document.getElementById('leader-status').textContent = `leader: ${data.leader || '—'}`;
-    } catch (_) {}
+      leaderPollHealthy = true;
+      const leader = data.leader || null;
+      setLeaderUI(leader);
+
+      if (currentLeader !== leader) {
+        if (currentLeader === null && leader) {
+          addLog(`Leader detected: ${leader}`, 'success');
+        } else if (currentLeader && leader) {
+          addLog(`Leader changed: ${currentLeader} -> ${leader}`, 'warn');
+        } else if (currentLeader && !leader) {
+          addLog('Leader unavailable', 'warn');
+        }
+        currentLeader = leader;
+      }
+
+      document.getElementById('last-health-check').textContent = `health: ok ${new Date().toLocaleTimeString('en', { hour12: false })}`;
+    } catch (_) {
+      if (leaderPollHealthy) {
+        addLog('Health check failed (gateway unreachable)', 'error');
+      }
+      leaderPollHealthy = false;
+      setLeaderUI(null);
+      currentLeader = null;
+      document.getElementById('last-health-check').textContent = 'health: down';
+    }
   }, 1000);
 
   // ─── Log Panel ────────────────────────────────────────────────────────────────
   function addLog(msg, type = '') {
-    const panel = document.getElementById('log-panel');
     const now = new Date().toLocaleTimeString('en', { hour12: false });
-    const entry = document.createElement('div');
-    entry.className = `log-entry ${type}`;
-    entry.textContent = `[ ${now} ] ${msg}`;
-    panel.appendChild(entry);
-    panel.scrollTop = panel.scrollHeight;
-    // Keep last 100
-    while (panel.children.length > 100) panel.removeChild(panel.firstChild);
+    const item = { time: now, msg, type };
+    logStore.push(item);
+    if (logStore.length > MAX_LOGS) logStore = logStore.slice(-MAX_LOGS);
+    renderLogEntry(item);
+    persistLogs();
+    updateStoredLogCount();
   }
 
   // ─── Toast ────────────────────────────────────────────────────────────────────
@@ -492,6 +630,14 @@
   }
 
   // ─── Boot ─────────────────────────────────────────────────────────────────────
+  hydrateLogsFromStorage();
+  document.getElementById('clear-logs-btn').addEventListener('click', () => {
+    logStore = [];
+    persistLogs();
+    hydrateLogsFromStorage();
+    addLog('Log history cleared', 'warn');
+  });
+  addLog('DistDraw initialized', 'info');
   connect();
 </script>
 </body>
